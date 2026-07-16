@@ -256,17 +256,17 @@ DUTY_LAG_ALPHA = 0.02  # Sim-5'te doğrulanan kararlı duty-cycle gecikme katsay
 SYSTEM_COMPONENTS = [
     {"Bileşen": "PV Panel", "Öneri/Değer": "A10Green A10J-S72 175W x 13 seri (veya benzer)",
      "Kısıt/Not": "Voc/Isc panel türüne göre değişir; string Voc'u DC bara başlangıcından düşük olmamalı"},
-    {"Bileşen": "Boost Dönüştürücü", "Öneri/Değer": "L≈100-500µH, anahtarlama ≥20kHz",
-     "Kısıt/Not": "Küçük endüktans → yüksek akım dalgalanması; büyük endüktans → yavaş tepki"},
-    {"Bileşen": "MOSFET + Sürücü", "Öneri/Değer": "IRF540N + IR2110",
-     "Kısıt/Not": "Anahtarlama kayıpları, ölü zaman (dead-time) verim kaybı yaratır"},
-    {"Bileşen": "Akım Sensörü", "Öneri/Değer": "ACS712 (Hall-effect)",
-     "Kısıt/Not": "±birkaç mA gürültü — bu demoda ADC gürültüsü olarak modellendi"},
+    {"Bileşen": "Boost Dönüştürücü", "Öneri/Değer": "Bu kodda L=2mH kullanıldı (gerçek donanımda tipik olarak L≈100-500µH tercih edilir)",
+     "Kısıt/Not": "Küçük endüktans → yüksek akım dalgalanması; büyük endüktans → yavaş tepki. Model, ayrık anahtarlama frekansını değil, ORTALANMIŞ (averaged) bir devre davranışını temsil eder"},
+    {"Bileşen": "MOSFET + Sürücü", "Öneri/Değer": "Gerçek donanımda ör. IRF540N + IR2110 (bu demoda ayrıca modellenmedi)",
+     "Kısıt/Not": "Anahtarlama kayıpları, ölü zaman (dead-time) gerçek donanımda ek verim kaybı yaratır; bu basitleştirilmiş modelde yok"},
+    {"Bileşen": "Akım Sensörü", "Öneri/Değer": "Gerçek donanımda ör. ACS712 (Hall-effect)",
+     "Kısıt/Not": "Bu demoda ±0.02A (20mA) çözünürlüklü ADC gürültüsü olarak modellendi"},
     {"Bileşen": "Gerilim Ölçümü", "Öneri/Değer": "Dirençli bölücü + op-amp buffer",
-     "Kısıt/Not": "ADC çözünürlüğü (12-bit tipik) ölçüm hassasiyetini sınırlar"},
-    {"Bileşen": "Mikrodenetleyici", "Öneri/Değer": "STM32F4/F7 veya TI C2000",
+     "Kısıt/Not": "Bu demoda ±0.05V çözünürlüklü ADC gürültüsü olarak modellendi"},
+    {"Bileşen": "Mikrodenetleyici", "Öneri/Değer": "Gerçek donanımda ör. STM32F4/F7 veya TI C2000 (bu demoda spesifik bir MCU modellenmedi)",
      "Kısıt/Not": "Örnekleme hızı ve PWM çözünürlüğü gerçek zamanlı performansı belirler"},
-    {"Bileşen": "DC Bara Kapasitesi", "Öneri/Değer": "100-470µF",
+    {"Bileşen": "DC Bara Kapasitesi", "Öneri/Değer": "Bu kodda C=500µF kullanıldı",
      "Kısıt/Not": "Küçük kapasite → gerilim dalgalanması; büyük kapasite → yavaş geçiş tepkisi"},
     {"Bileşen": "Yük / İnvertör", "Öneri/Değer": "Şebeke-bağlı invertör (aktif gerilim regülasyonlu)",
      "Kısıt/Not": "Bu demoda invertör, DC-barayı sabit bir hedef gerilimde tutan aktif bir kontrolcü olarak modellendi (Model A)"},
@@ -275,9 +275,10 @@ SYSTEM_COMPONENTS = [
 KNOWN_CONSTRAINTS = [
     "ADC ölçüm gürültüsü (gerilim ±0.05V, akım ±0.02A çözünürlük varsayıldı)",
     "Duty-cycle kontrol döngüsünün fiziksel gecikmesi (anlık değil, yarı-statik hedefe kademeli yaklaşma)",
-    "Anahtarlamalı devrenin LC salınım dinamiği (endüktör/kapasitör geçiş davranışı)",
-    "Sınırlı mikrodenetleyici hesaplama gücü (gerçek donanımda PSO gibi ağır algoritmalar pratik değildir)",
+    "Endüktör/kapasitör geçiş dinamiği (ortalanmış devre modeli, ayrık anahtarlama değil)",
+    "Gerçek donanımda PSO gibi hesaplama-ağır algoritmaların mikrodenetleyicide çalıştırılması pratik değildir (bu demoda ayrıca test edilmedi)",
     "DC bara başlangıç geriliminin panel Voc'undan güvenli şekilde yüksek olması gerekliliği (boost topolojisi kısıtı)",
+    "Görev döngüsü (duty cycle) fiziksel olarak %95 ile sınırlandı (gerçek anahtarlamalı kaynaklarda tam %100 doygunluk mümkün değildir)",
 ]
 
 
@@ -360,6 +361,11 @@ st.title("Canlı MPPT Demo — P&O vs INC")
 st.caption(
     "Sim-3/4'te doğrulanan algoritma mantığı, Open-Meteo'dan çekilen canlı "
     "ışınım (G) ve sıcaklık (T) verisiyle gerçek zamanlı çalıştırılır."
+)
+st.info(
+    "Bu demo, tek bir sabit G/T koşulunda algoritmanın MPP'ye yakınsama "
+    "yeteneğini gösterir. Yıllık (4282 saatlik, dinamik koşuldaki) "
+    "sonuçlarla birebir kıyaslanmamalıdır."
 )
 
 tab1, tab2 = st.tabs([
@@ -523,8 +529,9 @@ with tab2:
 
     st.subheader("Sistem Bileşenleri ve Gereksinimleri")
     st.table(pd.DataFrame(SYSTEM_COMPONENTS))
+    st.caption("MOSFET/Mikrodenetleyici/Akım Sensörü fiziksel donanım için geçerli olup, demoda ayrıca modellenmedi.")
 
-    st.subheader("Bilinen Kısıtlar (bu simülasyonda modellenen)")
+    st.subheader("Bilinen Kısıtlar")
     for c in KNOWN_CONSTRAINTS:
         st.markdown(f"- {c}")
 
