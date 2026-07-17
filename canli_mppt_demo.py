@@ -419,9 +419,8 @@ mod = load_module()
 
 with tab1:
     st.caption(
-        "Fotovoltaik sistemlerde enerji dönüşüm süreçlerindeki değişken çevresel "
-        "koşullarda enerji üretimi performansının, MPPT algoritmaları ile "
-        "aşamalı analizini içerir."
+        "Fotovoltaik sistemlerde sistemin performansının, değişken çevresel "
+        "koşullarda MPPT algoritmaları ile aşamalı analizini içerir."
     )
     if run_button:
         if data_source.startswith("Manuel"):
