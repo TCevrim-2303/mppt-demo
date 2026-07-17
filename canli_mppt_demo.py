@@ -418,6 +418,11 @@ with st.sidebar:
 mod = load_module()
 
 with tab1:
+    st.caption(
+        "Fotovoltaik sistemlerde enerji dönüşüm süreçlerindeki değişken çevresel "
+        "koşullarda enerji üretimi performansının, MPPT algoritmaları ile "
+        "aşamalı analizini içerir."
+    )
     if run_button:
         if data_source.startswith("Manuel"):
             ghi_now, temp_now = float(manual_g), float(manual_t)
@@ -520,6 +525,10 @@ with tab1:
 
 with tab2:
     st.header("Sim-5: Donanım Durum Makinesi")
+    st.caption(
+        "MPPT algoritmalarının, gerçekçi donanım fiziği ve ölçüm gürültüsü "
+        "altındaki performansını simüle eder."
+    )
     st.caption(
         "Bu sekme Sim-1→4'ten TAMAMEN BAĞIMSIZ çalışır. Burada P&O/INC kararları "
         "artık anlık değil, gerçek bir yükseltici (boost) dönüştürücünün "
