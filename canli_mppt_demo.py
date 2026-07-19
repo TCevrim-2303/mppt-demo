@@ -375,19 +375,27 @@ tab1, tab2 = st.tabs([
 
 with st.sidebar:
     st.header("Ayarlar")
-    st.subheader("Simülasyon aşaması")
+
+    # ---- HER İKİ SEKME İÇİN GEÇERLİ ----
+    st.subheader("Ortak ayarlar")
+    st.caption("Her iki sekmeyi de etkiler")
+    lat = st.number_input("Enlem", value=38.4237, format="%.4f")
+    lon = st.number_input("Boylam", value=27.1428, format="%.4f")
+    update_interval = st.slider("Güncelleme aralığı (sn)", 1, 10, 2)
+
+    st.markdown("---")
+
+    # ---- YALNIZCA 1. SEKME (Sim-1 -> Sim-4) ----
+    st.subheader("Algoritma Karşılaştırması ayarları")
+    st.caption("Yalnızca 1. sekmeyi etkiler. Donanım simülasyonu ayarları "
+               "kendi sekmesinin içindedir.")
     stage_choice = st.selectbox(
         "Hangi aşamanın algoritma mantığı çalıştırılsın?",
         list(STAGE_CONFIGS.keys()),
         index=3,  # varsayılan: Sim-4 (en gelişmiş)
     )
     st.caption(f"📋 {STAGE_CONFIGS[stage_choice]['aciklama']}")
-    st.markdown("---")
-    lat = st.number_input("Enlem", value=38.4237, format="%.4f")
-    lon = st.number_input("Boylam", value=27.1428, format="%.4f")
-    update_interval = st.slider("Güncelleme aralığı (sn)", 1, 10, 2)
-    n_iterations = st.slider("Toplam adım sayısı", 20, 500, 100)
-    st.markdown("---")
+    n_iterations = st.slider("Karar adımı sayısı", 20, 500, 100)
     st.subheader("Veri kaynağı")
     data_source = st.radio(
         "G/T verisi nereden alınsın?",
@@ -545,6 +553,9 @@ with tab2:
 
     st.markdown("---")
     st.subheader("Canlı Donanım Simülasyonu")
+    st.caption("Bu sekmenin ayarları aşağıdadır. Sol menüdeki Algoritma "
+               "Karşılaştırması ayarları bu simülasyonu etkilemez; yalnızca "
+               "enlem, boylam ve güncelleme aralığı ortaktır.")
 
     st.subheader("Veri kaynağı")
     data_source5 = st.radio(
