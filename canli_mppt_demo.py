@@ -62,6 +62,7 @@ import requests
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 from pvlib.pvsystem import retrieve_sam, calcparams_cec, singlediode
 
@@ -442,13 +443,6 @@ with st.sidebar:
                  "ortam/hava sıcaklığı sayılır ve üzerine ışınıma bağlı bir "
                  "ısınma payı eklenir (gerçekçi saha koşulu yaklaşıklaması).",
         )
-    st.markdown("---")
-    st.subheader("Senaryo enjeksiyonu")
-    inject_cloud = st.checkbox("Bulut geçişi simüle et (ışınımı periyodik düşür)")
-    inject_shading = st.checkbox("Kısmi gölgeleme simüle et (ışınımı %40'a sabitle)")
-    run_button = st.button("▶ Canlıyı Başlat", type="primary")
-
-
 mod = load_module()
 
 with tab1:
@@ -456,6 +450,17 @@ with tab1:
         "Fotovoltaik sistemlerde sistemin performansının, değişken çevresel "
         "koşullarda MPPT algoritmaları ile aşamalı analizini içerir."
     )
+
+    st.subheader("Senaryo enjeksiyonu")
+    sc1, sc2 = st.columns(2)
+    with sc1:
+        inject_cloud = st.checkbox("Bulut geçişi simüle et (ışınımı periyodik düşür)",
+                                    key="inj_cloud")
+    with sc2:
+        inject_shading = st.checkbox("Kısmi gölgeleme simüle et (ışınımı %40'a sabitle)",
+                                      key="inj_shade")
+
+    run_button = st.button("▶ Canlıyı Başlat", type="primary", key="run_tab1")
     if run_button:
         if data_source.startswith("Manuel"):
             ghi_now, temp_now = float(manual_g), float(manual_t)
@@ -544,15 +549,17 @@ with tab1:
                 c3.metric("INC verimlilik (anlık)", f"{100*p_ic_module/max(p_true_module,1e-6):.1f}%")
                 c4.metric("Hücre sıcaklığı", f"{temp_cell:.1f} °C")
 
-                d1, d2, d3 = st.columns(3)
-                d1.metric("P&O verimlilik (kümülatif)", f"{_kum_po:.1f}%",
+                # Alt satır: kümülatif değerler, karşılık gelen anlık değerlerin
+                # TAM ALTINA hizalanır (aynı kolon sayısı ve aynı sıra).
+                d1, d2, d3, d4 = st.columns(4)
+                d1.metric("Tamamlanan adım", f"{k+1} / {n_iterations}")
+                d2.metric("P&O verimlilik (kümülatif)", f"{_kum_po:.1f}%",
                           help="Başlangıçtan bu adıma kadarki toplam enerjinin ideal "
                                "toplam enerjiye oranı. Tez betiklerindeki ölçütle aynı "
                                "mantıktadır ve adım sayısı arttıkça kararlı hale gelir.")
-                d2.metric("INC verimlilik (kümülatif)", f"{_kum_ic:.1f}%",
+                d3.metric("INC verimlilik (kümülatif)", f"{_kum_ic:.1f}%",
                           help="Başlangıçtan bu adıma kadarki toplam enerjinin ideal "
                                "toplam enerjiye oranı.")
-                d3.metric("Tamamlanan adım", f"{k+1} / {n_iterations}")
 
             with iv_placeholder.container():
                 fig2 = go.Figure()
@@ -670,6 +677,7 @@ with tab2:
         chart5_ph = st.empty()
         metric5_ph = st.empty()
         vdc5_ph = st.empty()
+        curve5_ph = st.empty()
 
         for k in range(n5_steps):
             if stc_style:
@@ -764,7 +772,9 @@ with tab2:
                 m4.metric("DC Bara (INC)", f"{vdc_ic5:.1f} V")
                 m5.metric("Panel Vmp (canlı, o anki G/T)", f"{v_mp_string5:.1f} V")
 
-                n1, n2, n3 = st.columns(3)
+                # Alt satır: kümülatif değerler, karşılık gelen anlık değerlerin
+                # TAM ALTINA hizalanır (aynı kolon sayısı ve aynı sıra).
+                n1, n2, n3, n4, n5 = st.columns(5)
                 n1.metric("P&O verimlilik (kümülatif)", f"{_kum_po5:.1f}%",
                           help="Başlangıçtan bu adıma kadarki toplam enerjinin ideal "
                                "toplam enerjiye oranı. Adım sayısı arttıkça kararlı hale gelir.")
@@ -787,6 +797,49 @@ with tab2:
                 f6.update_layout(title="İnvertör Girişi DC-Link Gerilimi (V)",
                                   xaxis_title="Karar adımı", yaxis_title="Gerilim (V)", height=300)
                 st.plotly_chart(f6, use_container_width=True, key=f"hw_vdc_{k}")
+
+            # --- I-V ve P-V karakteristik eğrileri (o anki G/T koşulunda) ---
+            with curve5_ph.container():
+                v_sys_curve = v_mesh5 * NUM_SERIES_MODULES     # modül -> string gerilimi
+                p_sys_curve = p_mesh5 * NUM_SERIES_MODULES     # modül -> string gücü
+                v_mpp_sys = v_mp5 * NUM_SERIES_MODULES
+                p_mpp_sys = p_true5
+
+                f7 = make_subplots(rows=1, cols=2,
+                                    subplot_titles=("I-V Karakteristiği", "P-V Karakteristiği"))
+
+                # Sol: I-V eğrisi
+                f7.add_trace(go.Scatter(x=v_sys_curve, y=i_mesh5, name="I-V eğrisi",
+                                         line=dict(color="#1f77b4")), row=1, col=1)
+                f7.add_trace(go.Scatter(x=[v_mpp_sys], y=[i_mp5], mode="markers",
+                                         name="MPP", marker=dict(color="red", size=10,
+                                                                 symbol="star")),
+                              row=1, col=1)
+
+                # Sağ: P-V eğrisi + algoritmaların o anki konumu
+                f7.add_trace(go.Scatter(x=v_sys_curve, y=p_sys_curve, name="P-V eğrisi",
+                                         line=dict(color="#ff7f0e")), row=1, col=2)
+                f7.add_trace(go.Scatter(x=[v_mpp_sys], y=[p_mpp_sys], mode="markers",
+                                         name="MPP", marker=dict(color="red", size=10,
+                                                                 symbol="star"),
+                                         showlegend=False), row=1, col=2)
+                f7.add_trace(go.Scatter(x=[v_meas_po5], y=[p_meas_po5 * NUM_SERIES_MODULES],
+                                         mode="markers", name="P&O konumu",
+                                         marker=dict(color="#1f77b4", size=11)), row=1, col=2)
+                f7.add_trace(go.Scatter(x=[v_meas_ic5], y=[p_meas_ic5 * NUM_SERIES_MODULES],
+                                         mode="markers", name="INC konumu",
+                                         marker=dict(color="#2ca02c", size=11,
+                                                     symbol="diamond")), row=1, col=2)
+
+                f7.update_xaxes(title_text="String Gerilimi (V)", row=1, col=1)
+                f7.update_xaxes(title_text="String Gerilimi (V)", row=1, col=2)
+                f7.update_yaxes(title_text="Akım (A)", row=1, col=1)
+                f7.update_yaxes(title_text="Güç (W)", row=1, col=2)
+                f7.update_layout(
+                    title=f"Karakteristik Eğriler — G={g5_use:.0f} W/m², "
+                          f"T_hücre={temp_cell5:.1f} °C",
+                    height=380)
+                st.plotly_chart(f7, use_container_width=True, key=f"hw_curve_{k}")
 
             time.sleep(max(0.1, update_interval / 4.0))
 
