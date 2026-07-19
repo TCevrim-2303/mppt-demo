@@ -125,11 +125,11 @@ def fetch_live_weather(lat, lon):
 STAGE_CONFIGS = {
     "Sim-1: Referans Durum": {
         "iv_model": "crude", "step_mode": "fixed", "fixed_step": 2.0,
-        "aciklama": "Kaba 3-nokta IV modeli, sabit 2.0V adım",
+        "aciklama": "Parçalı doğrusal I-V modeli, sabit 2.0V adım",
     },
     "Sim-2: Parametrik Optimizasyon": {
         "iv_model": "crude", "step_mode": "fixed", "fixed_step": 1.0,
-        "aciklama": "Kaba 3-nokta IV modeli, sabit 1.0V adım (küçültülmüş)",
+        "aciklama": "Parçalı doğrusal I-V modeli, sabit 1.0V adım (küçültülmüş)",
     },
     "Sim-3: Algoritmik İyileştirme": {
         "iv_model": "newton", "step_mode": "fixed", "fixed_step": 1.0,
@@ -144,7 +144,8 @@ STAGE_CONFIGS = {
 
 def build_iv_curve(mod, poa_irradiance, temp_cell, iv_model="newton", n_points=250):
     """IV eğrisini seçilen aşamaya göre üretir:
-       - 'crude'  : Sim-1/2'deki kaba 3-nokta (Isc, Vmp, Voc) doğrusal model
+       - 'crude'  : Sim-1/2'deki parçalı doğrusal I-V modeli
+                    (Isc, MPP, Voc noktaları arası doğrusal enterpolasyon)
        - 'newton' : Sim-3/4'teki Newton-Raphson tam diyot eğrisi
     """
     diode_params = calcparams_cec(
@@ -403,8 +404,6 @@ with st.sidebar:
     lon = st.number_input("Boylam", value=27.1428, format="%.4f")
     update_interval = st.slider("Güncelleme aralığı (sn)", 1, 10, 2)
 
-    st.markdown("---")
-
     # ---- YALNIZCA 1. SEKME (Sim-1 -> Sim-4) ----
     st.subheader("Algoritma Karşılaştırması ayarları")
     st.caption("Yalnızca 1. sekmeyi etkiler. Donanım simülasyonu ayarları "
@@ -531,11 +530,29 @@ with tab1:
                 st.plotly_chart(fig, use_container_width=True, key=f"power_chart_{k}")
 
             with metric_placeholder.container():
+                # Kümülatif verimlilik: o ana kadarki TÜM adımların toplam gücünün,
+                # toplam ideal güce oranı. Tez betiklerindeki ölçütle aynı mantıktadır
+                # ve adım sayısı arttıkça kararlı hale gelir. Anlık değer ise yalnızca
+                # son adımı yansıttığı için P&O salınımıyla dalgalanır.
+                _tot_true = sum(history["P_TRUE"])
+                _kum_po = 100.0 * sum(history["P_PO"]) / max(_tot_true, 1e-6)
+                _kum_ic = 100.0 * sum(history["P_IC"]) / max(_tot_true, 1e-6)
+
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Anlık G (W/m²)", f"{g_effective:.0f}")
-                c2.metric("P&O verimlilik", f"{100*p_po_module/max(p_true_module,1e-6):.1f}%")
-                c3.metric("INC verimlilik", f"{100*p_ic_module/max(p_true_module,1e-6):.1f}%")
+                c2.metric("P&O verimlilik (anlık)", f"{100*p_po_module/max(p_true_module,1e-6):.1f}%")
+                c3.metric("INC verimlilik (anlık)", f"{100*p_ic_module/max(p_true_module,1e-6):.1f}%")
                 c4.metric("Hücre sıcaklığı", f"{temp_cell:.1f} °C")
+
+                d1, d2, d3 = st.columns(3)
+                d1.metric("P&O verimlilik (kümülatif)", f"{_kum_po:.1f}%",
+                          help="Başlangıçtan bu adıma kadarki toplam enerjinin ideal "
+                               "toplam enerjiye oranı. Tez betiklerindeki ölçütle aynı "
+                               "mantıktadır ve adım sayısı arttıkça kararlı hale gelir.")
+                d2.metric("INC verimlilik (kümülatif)", f"{_kum_ic:.1f}%",
+                          help="Başlangıçtan bu adıma kadarki toplam enerjinin ideal "
+                               "toplam enerjiye oranı.")
+                d3.metric("Tamamlanan adım", f"{k+1} / {n_iterations}")
 
             with iv_placeholder.container():
                 fig2 = go.Figure()
@@ -735,12 +752,26 @@ with tab2:
             v_mp_string5 = v_mp5 * NUM_SERIES_MODULES  # o anki koşulda GERÇEK, CANLI hesaplanan Vmp
 
             with metric5_ph.container():
+                # Kümülatif verimlilik: o ana kadarki tüm karar adımlarının toplamı.
+                _tot_true5 = sum(hist5["P_TRUE"])
+                _kum_po5 = 100.0 * sum(hist5["P_PO"]) / max(_tot_true5, 1e-6)
+                _kum_ic5 = 100.0 * sum(hist5["P_IC"]) / max(_tot_true5, 1e-6)
+
                 m1, m2, m3, m4, m5 = st.columns(5)
-                m1.metric("P&O verimlilik", f"{100*p_meas_po5/max(p_true5,1e-6):.1f}%")
-                m2.metric("INC verimlilik", f"{100*p_meas_ic5/max(p_true5,1e-6):.1f}%")
+                m1.metric("P&O verimlilik (anlık)", f"{100*p_meas_po5/max(p_true5,1e-6):.1f}%")
+                m2.metric("INC verimlilik (anlık)", f"{100*p_meas_ic5/max(p_true5,1e-6):.1f}%")
                 m3.metric("DC Bara (P&O)", f"{vdc_po5:.1f} V")
                 m4.metric("DC Bara (INC)", f"{vdc_ic5:.1f} V")
                 m5.metric("Panel Vmp (canlı, o anki G/T)", f"{v_mp_string5:.1f} V")
+
+                n1, n2, n3 = st.columns(3)
+                n1.metric("P&O verimlilik (kümülatif)", f"{_kum_po5:.1f}%",
+                          help="Başlangıçtan bu adıma kadarki toplam enerjinin ideal "
+                               "toplam enerjiye oranı. Adım sayısı arttıkça kararlı hale gelir.")
+                n2.metric("INC verimlilik (kümülatif)", f"{_kum_ic5:.1f}%",
+                          help="Başlangıçtan bu adıma kadarki toplam enerjinin ideal "
+                               "toplam enerjiye oranı.")
+                n3.metric("Tamamlanan adım", f"{k+1} / {n5_steps}")
 
             if vdc_po5 < v_mp_string5 or vdc_ic5 < v_mp_string5:
                 st.error(
