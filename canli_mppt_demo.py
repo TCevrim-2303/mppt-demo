@@ -530,7 +530,7 @@ with tab1:
                 fig.add_trace(go.Scatter(y=history["P_IC"], name="INC", line=dict(color="#ff7f0e")))
                 fig.add_trace(go.Scatter(y=history["P_TRUE"], name="P_TRUE (ideal)",
                                           line=dict(color="black", dash="dash")))
-                fig.update_layout(title=f"Canlı güç üretimi (dizi seviyesi, W) — {stage_choice}",
+                fig.update_layout(title=f"Canlı güç üretimi (string seviyesi, W) — {stage_choice}",
                                    xaxis_title="Adım", yaxis_title="Güç (W)", height=380)
                 st.plotly_chart(fig, use_container_width=True, key=f"power_chart_{k}")
 
@@ -753,7 +753,7 @@ with tab2:
                 f5.add_trace(go.Scatter(y=hist5["P_IC"], name="INC (donanım)", line=dict(color="#ff7f0e")))
                 f5.add_trace(go.Scatter(y=hist5["P_TRUE"], name="P_TRUE (ideal)",
                                          line=dict(color="black", dash="dash")))
-                f5.update_layout(title="Sim-5: Donanım-gerçekçi güç üretimi (dizi seviyesi, W)",
+                f5.update_layout(title="Sim-5: Donanım-gerçekçi güç üretimi (string seviyesi, W)",
                                   xaxis_title="Karar adımı", yaxis_title="Güç (W)", height=380)
                 st.plotly_chart(f5, use_container_width=True, key=f"hw_power_{k}")
 
@@ -803,7 +803,7 @@ with tab2:
                 v_sys_curve = v_mesh5 * NUM_SERIES_MODULES     # modül -> string gerilimi
                 p_sys_curve = p_mesh5 * NUM_SERIES_MODULES     # modül -> string gücü
                 v_mpp_sys = v_mp5 * NUM_SERIES_MODULES
-                p_mpp_sys = p_true5
+                p_mpp_sys = p_true5 * NUM_SERIES_MODULES   # modül -> string gücü
 
                 f7 = make_subplots(rows=1, cols=2,
                                     subplot_titles=("I-V Karakteristiği", "P-V Karakteristiği"))
