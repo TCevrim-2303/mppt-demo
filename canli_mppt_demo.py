@@ -373,8 +373,28 @@ tab1, tab2 = st.tabs([
     "⚙️ Donanım Durum Makinesi (Sim-5)",
 ])
 
+
+# --- Karar adımı sayısı: iki sekme arasında çift yönlü senkronizasyon ---
+def _sync_ka_from_sidebar():
+    """Sol menüdeki slider değişince Sim-5 sekmesindekini de günceller."""
+    st.session_state["ka_tab5"] = st.session_state["ka_sidebar"]
+
+
+def _sync_ka_from_tab5():
+    """Sim-5 sekmesindeki slider değişince sol menüdekini de günceller."""
+    st.session_state["ka_sidebar"] = st.session_state["ka_tab5"]
+
+
 with st.sidebar:
     st.header("Ayarlar")
+
+    # ---- İKİ SEKME ARASINDA SENKRON KARAR ADIMI SAYISI ----
+    # Her iki slider ortak bir değeri paylaşır: birinde yapılan değişiklik
+    # diğerine anında yansır.
+    if "ka_sidebar" not in st.session_state:
+        st.session_state["ka_sidebar"] = 60
+    if "ka_tab5" not in st.session_state:
+        st.session_state["ka_tab5"] = 60
 
     # ---- HER İKİ SEKME İÇİN GEÇERLİ ----
     st.subheader("Ortak ayarlar")
@@ -395,7 +415,14 @@ with st.sidebar:
         index=3,  # varsayılan: Sim-4 (en gelişmiş)
     )
     st.caption(f"📋 {STAGE_CONFIGS[stage_choice]['aciklama']}")
-    n_iterations = st.slider("Karar adımı sayısı", 20, 500, 100)
+    n_iterations = st.slider(
+        "Karar adımı sayısı", 10, 200,
+        key="ka_sidebar", on_change=_sync_ka_from_sidebar,
+        help="Bu değer, Donanım Durum Makinesi sekmesindeki karar adımı "
+             "sayısıyla ortaktır; birinde yapılan değişiklik diğerine yansır. "
+             "Varsayılan 60, tez simülasyon betiklerinde kullanılan iç "
+             "yakınsama adım sayısıyla aynıdır.",
+    )
     st.subheader("Veri kaynağı")
     data_source = st.radio(
         "G/T verisi nereden alınsın?",
@@ -563,17 +590,22 @@ with tab2:
         index=1, key="datasrc5",
     )
     if data_source5.startswith("Manuel"):
-        col_a, col_b, col_c = st.columns(3)
+        col_a, col_b = st.columns(2)
         with col_a:
             g5 = st.slider("Işınım G (W/m²)", 0, 1200, 800, key="g5")
         with col_b:
             t5 = st.slider("Hücre sıcaklığı (°C)", -10, 50, 25, key="t5")
-        with col_c:
-            n5_steps = st.slider("Karar adımı sayısı", 10, 150, 40, key="n5steps")
         st.caption("💡 Tam STC (Standart Test Koşulları) için G=1000, T=25 girin. "
                    "Manuel modda T her zaman doğrudan hücre sıcaklığı olarak kullanılır.")
-    else:
-        n5_steps = st.slider("Karar adımı sayısı", 10, 150, 40, key="n5steps_api")
+
+    n5_steps = st.slider(
+        "Karar adımı sayısı", 10, 200,
+        key="ka_tab5", on_change=_sync_ka_from_tab5,
+        help="Bu değer, sol menüdeki karar adımı sayısıyla ortaktır; "
+             "birinde yapılan değişiklik diğerine yansır. Varsayılan 60, "
+             "tez simülasyon betiklerinde kullanılan iç yakınsama adım "
+             "sayısıyla aynıdır.",
+    )
 
     n5_micro = st.slider(
         "Karar adımı başına mikro-adım (fiziksel çözünürlük)", 10, 100, 50, key="n5micro",
