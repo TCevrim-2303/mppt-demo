@@ -302,11 +302,17 @@ class DCDC_Boost_StateMachine:
     besleyemez). Bu, ışınım ne olursa olsun DC-baranın hedefe yakın kalmasını
     sağlar -- gerçek invertörlerin davranışına çok daha sadık bir model.
     """
-    def __init__(self, v_pv_init, v_dc_init, v_dc_target):
+    def __init__(self, v_pv_init, v_dc_init, v_dc_target,
+                 load_model="resistive", r_load=None):
         self.L = 2e-3
         self.C_in = 20e-6
         self.C_out = 500e-6
         self.v_dc_target = v_dc_target
+        # load_model:
+        #   "resistive" -> SABIT DIRENCLI YUK  (tez betigi Sim-5 ile AYNI)
+        #   "active"    -> AKTIF GERILIM REGULASYONU (invertor benzeri)
+        self.load_model = load_model
+        self.R_load = r_load
         self.adc_v_res = 0.05
         self.adc_i_res = 0.02
         self.v_pv = v_pv_init
@@ -333,7 +339,13 @@ class DCDC_Boost_StateMachine:
         # çektiği akımı gerilim hatasıyla orantılı ayarlar. Hedefin altındayken
         # hiç akım çekmez (güç geri besleyemez) -- bu yüzden düşük ışınımda bile
         # bara, pasif direnç modelindeki gibi orantılı olarak çökmez.
-        i_load = max(0.0, KP_LOAD * (self.v_dc - self.v_dc_target))
+        if self.load_model == "resistive":
+            # Sabit dirençli yük: tez betiğindeki Sim-5 ile birebir aynı ifade.
+            i_load = self.v_dc / max(self.R_load, 1e-6)
+        else:
+            # Aktif gerilim regülasyonu: invertör, bara hedefin üzerine çıktıkça
+            # gerilim hatasıyla orantılı akım çeker; altındayken akım çekmez.
+            i_load = max(0.0, KP_LOAD * (self.v_dc - self.v_dc_target))
         dv_dc_dt = ((1.0 - self.duty) * self.i_L - i_load) / self.C_out
 
         self.v_pv = max(0.0, self.v_pv + dv_pv_dt * self.dt)
@@ -636,6 +648,17 @@ with tab2:
         help="Her MPPT kararı arasında devrenin fiziksel olarak ayarlanması için "
              "kaç adet dt=1e-4s'lik mikro-adım koşturulacağı. Sim-5'teki gibi 50 önerilir.",
     )
+    load_model_choice = st.radio(
+        "Yük modeli",
+        ["Sabit dirençli yük (tez betiğiyle aynı)",
+         "Aktif gerilim regülasyonu (invertör benzeri)"],
+        index=0,
+        key="loadmodel5",
+        help="Varsayılan seçenek, tez betiğindeki Sim-5 ile birebir aynı yük "
+             "modelini kullanır: DC bara sabit bir direnç üzerinden deşarj olur. "
+             "İkinci seçenek, bara gerilimini hedefte tutmaya çalışan aktif bir "
+             "invertör denetimini modeller.",
+    )
     run5 = st.button("⚙️ Donanım Simülasyonunu Başlat", type="primary", key="run5")
 
     if run5:
@@ -657,18 +680,33 @@ with tab2:
         module_p_stc5 = mod5["I_mp_ref"] * mod5["V_mp_ref"]
         hysteresis5 = HYSTERESIS_FRACTION * module_p_stc5
 
-        # DC bara: string Voc'unun güvenli şekilde üzerinde başlar (Sim-5'teki kritik düzeltme)
-        # ve İNVERTÖR bu hedefi SABİT tutmaya çalışır (Model A -- gerçek şebeke-bağlı
-        # invertörlerin davranışı: hedef, tasarım aşamasında bir kez belirlenir,
-        # anlık ışınıma göre DEĞİŞMEZ).
+        # DC bara başlangıcı: string Voc'unun %15 üzerinde (boost topolojisi kısıtı).
         string_voc5 = mod5["V_oc_ref"] * NUM_SERIES_MODULES
         v_dc_nominal = string_voc5 * 1.15
-        st.info(f"String Voc: {string_voc5:.1f} V  →  DC bara HEDEF gerilimi: {v_dc_nominal:.1f} V "
-                f"(Voc'un %115'i, invertör bu hedefi ışınımdan bağımsız olarak korumaya çalışır)")
+
+        if load_model_choice.startswith("Sabit"):
+            # TEZ BETİĞİ İLE BİREBİR AYNI: yük, string nominal gücüne göre
+            # ölçeklenmiş sabit bir dirençtir. Bara gerilimi güce göre kayar.
+            _lm = "resistive"
+            p_string_nominal5 = module_p_stc5 * NUM_SERIES_MODULES
+            r_load5 = v_dc_nominal ** 2 / p_string_nominal5
+            st.info(f"String Voc: {string_voc5:.1f} V  →  DC bara başlangıcı: "
+                    f"{v_dc_nominal:.1f} V  |  R_load: {r_load5:.1f} Ω "
+                    f"(string nominal gücü {p_string_nominal5:.1f} W'a göre ölçeklendi). "
+                    f"Bu ayar tez betiğindeki Sim-5 ile birebir aynıdır.")
+        else:
+            _lm = "active"
+            r_load5 = None
+            st.info(f"String Voc: {string_voc5:.1f} V  →  DC bara HEDEF gerilimi: "
+                    f"{v_dc_nominal:.1f} V (Voc'un %115'i). İnvertör bu hedefi "
+                    f"ışınımdan bağımsız olarak korumaya çalışır. "
+                    f"Bu model tez betiğinde KULLANILMAMIŞTIR.")
 
         v_start_sys = mod5["V_oc_ref"] * 0.8 * NUM_SERIES_MODULES
-        state_po5 = DCDC_Boost_StateMachine(v_start_sys, v_dc_nominal, v_dc_nominal)
-        state_ic5 = DCDC_Boost_StateMachine(v_start_sys, v_dc_nominal, v_dc_nominal)
+        state_po5 = DCDC_Boost_StateMachine(v_start_sys, v_dc_nominal, v_dc_nominal,
+                                             load_model=_lm, r_load=r_load5)
+        state_ic5 = DCDC_Boost_StateMachine(v_start_sys, v_dc_nominal, v_dc_nominal,
+                                             load_model=_lm, r_load=r_load5)
         v_ref_po5, v_ref_ic5 = v_start_sys, v_start_sys
         direction_po5 = 1.0
         p_prev_po5 = None
